@@ -42,3 +42,34 @@ To create (or update) resources in OpenShift:
 ```
 kustomize build --enable-alpha-plugins | oc apply -f-
 ```
+
+## Theory of operation
+
+The `kustomize` command reads `kustomizations.yml` and renders on
+stdout resources declared in the `resources` key. It will add a
+namespace key to the resources using the value declared in the
+`namespace` key.
+
+The `generators` section declares resources that are generated
+dynamically. The `secret-generator.yml` file instructs `kustomize` to
+generate resources from `ceph-admin-secret.yaml` andf
+`ceph-client-secret.yaml` using the `viaduct.ai/v1/ksops` plugin.
+`kustomize` will look for plugins in subdirectories of
+`~/.config/kustomize/plugin` (where it will find the `ksops` plugin
+you installed from the [Prerequisities](#prerequisites) section).
+
+The [KSOPS][] plugin uses [sops][] to decrypt the named files. The
+`sops` command will decrypt encrypted keys using GPG. When encrypting
+files, it will encrypt data to the keys declared in `.sops.yaml`.
+
+To edit an encrypted file:
+
+```
+sops <filename>
+```
+
+To decrypt a file to stdout:
+
+```
+sops -d <filename>
+```
