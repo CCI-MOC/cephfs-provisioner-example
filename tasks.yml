@@ -1,0 +1,164 @@
+---
+- name: create the namespace
+  k8s:
+    state: present
+    definition:
+      kind: namespace
+      apiVersion: v1
+      metadata:
+        name: cephfs
+
+- name: create service account
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+
+- name: create cluster role
+  k8s:
+    state: present
+    definition:
+      kind: ClusterRole
+      apiVersion: rbac.authorization.k8s.io/v1
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+      rules:
+        - apiGroups: [""]
+          resources: ["persistentvolumes"]
+          verbs: ["get", "list", "watch", "create", "delete"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims"]
+          verbs: ["get", "list", "watch", "update"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["storageclasses"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["events"]
+          verbs: ["create", "update", "patch"]
+        - apiGroups: [""]
+          resources: ["services"]
+          resourceNames: ["kube-dns","coredns"]
+          verbs: ["list", "get"]
+
+- name: create cluster role binding
+  k8s:
+    state: present
+    definition:
+      kind: ClusterRoleBinding
+      apiVersion: rbac.authorization.k8s.io/v1
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+      subjects:
+        - kind: ServiceAccount
+          name: cephfs-provisioner
+          namespace: cephfs
+      roleRef:
+        kind: ClusterRole
+        name: cephfs-provisioner
+        apiGroup: rbac.authorization.k8s.io
+
+- name: create role
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+      rules:
+        - apiGroups: [""]
+          resources: ["secrets"]
+          verbs: ["create", "get", "delete"]
+        - apiGroups: [""]
+          resources: ["endpoints"]
+          verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+- name: create role binding
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: cephfs-provisioner
+      subjects:
+      - kind: ServiceAccount
+        name: cephfs-provisioner
+        namespace: cephfs
+
+- name: create deployment for ceph-fs provisioner
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cephfs-provisioner
+        namespace: cephfs
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: cephfs-provisioner
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: cephfs-provisioner
+          spec:
+            containers:
+            - name: cephfs-provisioner
+              image: "quay.io/external_storage/cephfs-provisioner:latest"
+              env:
+              - name: PROVISIONER_NAME
+                value: ceph.com/cephfs
+              - name: PROVISIONER_SECRET_NAMESPACE
+                value: cephfs
+              command:
+              - "/usr/local/bin/cephfs-provisioner"
+              args:
+              - "-id=cephfs-provisioner-1 -v 4"
+            serviceAccount: cephfs-provisioner
+
+- name: create ceph admin key secret
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      type: Opaque
+      metadata:
+        name: ceph-admin-secret
+        namespace: cephfs
+      data:
+        key: "{{ ceph_admin_key | b64encode }}"
+
+- name: create the storage class
+  k8s:
+    state: present
+    definition:
+      kind: StorageClass
+      apiVersion: storage.k8s.io/v1
+      metadata:
+        name: cephfs
+        namespace: cephfs
+      provisioner: ceph.com/cephfs
+      parameters:
+          monitors: 192.168.28.201:6789, 192.168.28.202:6789, 192.168.28.203:6789
+          adminId: "{{ ceph_admin }}"
+          adminSecretName: ceph-admin-secret
+          adminSecretnamespace: cephfs
+          claimRoot: /pvc-volumes

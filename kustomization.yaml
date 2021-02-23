@@ -1,0 +1,14 @@
+namespace: ceph-cephfs
+
+resources:
+  - clusterrolebinding.yaml
+  - clusterrole.yaml
+  - deployment.yaml
+  - rolebinding.yaml
+  - role.yaml
+  - serviceaccount.yaml
+  - storageclass.yaml
+
+
+generators:
+  - secret-generator.yaml
