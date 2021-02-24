@@ -29,8 +29,7 @@ spec:
           volumeMounts:
             - name: ceph-conf
               mountPath: /etc/ceph
-          securityContext:
-            runAsUser: 0
+          privileged: true
       volumes:
         - name: ceph-conf
           emptyDir: {}

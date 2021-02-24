@@ -22,3 +22,11 @@ rules:
       - create
       - update
       - patch
+  - apiGroups:
+      - security.openshift.io
+    resourceName:
+      - privileged
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
